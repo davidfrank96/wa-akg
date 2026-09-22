@@ -17,7 +17,7 @@ echo 'vm.swappiness=10' > /etc/sysctl.d/90-wa-gateway.conf
 sysctl --system >/dev/null
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get upgrade -y
+apt-get upgrade --with-new-pkgs -y --no-remove
 apt-get install -y --no-install-recommends ca-certificates curl xz-utils git mysql-server nginx ufw fail2ban unattended-upgrades
 if ! id mykustomers >/dev/null 2>&1; then
     adduser --disabled-password --gecos '' mykustomers
