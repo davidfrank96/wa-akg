@@ -1,0 +1,74 @@
+diff --git a/node_modules/libsignal/src/session_record.js b/node_modules/libsignal/src/session_record.js
+--- a/node_modules/libsignal/src/session_record.js
++++ b/node_modules/libsignal/src/session_record.js
+@@ -19,12 +19,10 @@
+     }
+ 
+     toString() {
+-        const baseKey = this.indexInfo && this.indexInfo.baseKey &&
+-            this.indexInfo.baseKey.toString('base64');
+-        return `<SessionEntry [baseKey=${baseKey}]>`;
+-    }
+-
+-    inspect() {
++        return '<SessionEntry redacted>';
++    }
++
++    [Symbol.for('nodejs.util.inspect.custom')]() {
+         return this.toString();
+     }
+ 
+@@ -267,10 +265,9 @@
+ 
+     closeSession(session) {
+         if (this.isClosed(session)) {
+-            console.warn("Session already closed", session);
++            console.warn("Session already closed");
+             return;
+         }
+-        console.info("Closing session:", session);
+         session.indexInfo.closed = Date.now();
+     }
+ 
+@@ -278,7 +275,6 @@
+         if (!this.isClosed(session)) {
+             console.warn("Session already open");
+         }
+-        console.info("Opening session:", session);
+         session.indexInfo.closed = -1;
+     }
+ 
+@@ -298,7 +294,6 @@
+                 }
+             }
+             if (oldestKey) {
+-                console.info("Removing old closed session:", oldestSession);
+                 delete this.sessions[oldestKey];
+             } else {
+                 throw new Error('Corrupt sessions object');
+diff --git a/node_modules/libsignal/src/queue_job.js b/node_modules/libsignal/src/queue_job.js
+--- a/node_modules/libsignal/src/queue_job.js
++++ b/node_modules/libsignal/src/queue_job.js
+@@ -47,7 +47,7 @@
+         if (typeof bucket === 'string') {
+             awaitable.name = bucket;
+         } else {
+-            console.warn("Unhandled bucket type (for naming):", typeof bucket, bucket);
++            console.warn("Unhandled bucket type (for naming):", typeof bucket);
+         }
+     }
+     let inactive;
+diff --git a/node_modules/libsignal/src/session_cipher.js b/node_modules/libsignal/src/session_cipher.js
+--- a/node_modules/libsignal/src/session_cipher.js
++++ b/node_modules/libsignal/src/session_cipher.js
+@@ -155,9 +155,7 @@
+             }
+         }
+         console.error("Failed to decrypt message with any known session...");
+-        for (const e of errs) {
+-            console.error("Session error:" + e, e.stack);
+-        }
++        console.error("Session decryption errors; details suppressed");
+         throw new errors.SessionError("No matching sessions found for message");
+     }
+ 
