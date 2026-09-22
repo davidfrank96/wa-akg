@@ -4,7 +4,14 @@ import { randomBytes } from 'node:crypto';
 import { seal, unseal, validKey, requireSecret } from '../../src/pilot/security.mjs';
 import { createRequire } from 'node:module';
 const { generateApiKey } = createRequire(import.meta.url)('../../src/lib/api-key.ts') as { generateApiKey(): string };
-import { PILOT_SOCKET_POLICY } from '../../src/pilot/whatsapp.mjs';
+import { PILOT_SOCKET_POLICY, hasPairedIdentity } from '../../src/pilot/whatsapp.mjs';
+
+test('QR-paired identity restores even when Baileys registered flag remains false', () => {
+    const qrPaired = { me: { id: 'test@s.whatsapp.net', name: 'Test' }, registered: false };
+    assert.equal(hasPairedIdentity(qrPaired), true);
+    assert.equal(hasPairedIdentity({}), false);
+    assert.equal(hasPairedIdentity({ me: { id: '', name: 'Test' } }), false);
+});
 
 test('API credentials use cryptographic randomness, not Math.random', () => {
     const original = Math.random;

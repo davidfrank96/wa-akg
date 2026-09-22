@@ -19,6 +19,9 @@ test('real HTTP authentication, session boundary, disabled routes, controlled se
     try {
         for (const key of ['', 'incorrect']) assert.equal((await request('/v1/sessions/test/messages', 'POST', key, {})).status, 401);
         assert.equal((await request('/v1/sessions/test')).status, 200);
+        assert.equal((await request('/v1/sessions/test', 'GET', '')).status, 401);
+        const detailed = await (await request('/v1/sessions/test')).json();
+        assert.ok(detailed.diagnostics.memoryBytes.heapUsed > 0);
         assert.equal((await request('/v1/sessions/another/messages', 'POST', apiKey, {})).status, 403);
         for (const path of ['/docs', '/swagger', '/api/auth/register', '/api/socket/io', '/api/groups/test', '/api/messages/test/broadcast', '/api/upload']) {
             assert.equal((await request(path, 'POST')).status, 404);
@@ -30,6 +33,7 @@ test('real HTTP authentication, session boundary, disabled routes, controlled se
         assert.equal(firstHealth.status, 200);
         const data = await firstHealth.text(); assert.ok(!data.includes(apiKey) && !data.includes('must-not-leak'));
         assert.equal(JSON.parse(data).whatsapp, 'not_paired');
+        assert.equal(JSON.parse(data).diagnostics, undefined);
         healthy = false; assert.equal((await request('/healthz')).status, 503);
         healthy = true; assert.equal((await request('/healthz')).status, 200);
         state = 'connected';

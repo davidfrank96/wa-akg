@@ -63,6 +63,8 @@ Message API returns the provider ID. Delivery statuses are bounded to the most r
 
 ## Operations, updates and recovery
 
+QR pairing in Baileys rc14 persists the account identity in `creds.me`; it does not set `creds.registered`. Restoration follows the same identity check as Baileys login, even when pairing is disabled. The authenticated session-status response includes process uptime, Node memory counters and connection open/disconnect/retry counts. Counters reset on process restart; record them before each restart. Public health omits these diagnostics. Do not open the Node inspector to collect memory: use the authenticated counters.
+
 Use `ssh -i ~/.ssh/mykustomers_wa_gateway mykustomers@<pilot-ip>`.
 
 | Operation | Remote command |

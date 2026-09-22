@@ -7,6 +7,7 @@ export interface Gateway {
     qr(): string | null;
     send(recipient: string, text: string): Promise<string>;
     delivery(id: string): string | null;
+    diagnostics?(): { connectionOpens: number; disconnects: number; reconnectAttempts: number };
 }
 
 export function gatewayServer(config: { apiKey: string; sessionId: string; recipients: string[]; pairingEnabled: boolean }, gateway: Gateway, databaseHealthy: () => Promise<boolean>) {
@@ -41,7 +42,9 @@ export function gatewayServer(config: { apiKey: string; sessionId: string; recip
             if (++requests > 60) return reply(res, 429, { error: 'Rate limit exceeded' });
             const base = `/v1/sessions/${config.sessionId}`;
             if (path.startsWith('/v1/sessions/') && !path.startsWith(`${base}/`) && path !== base) return reply(res, 403, { error: 'Session not authorized' });
-            if (path === base && req.method === 'GET') return reply(res, 200, { status: gateway.status() });
+            if (path === base && req.method === 'GET') return reply(res, 200, { status: gateway.status(), diagnostics: {
+                uptimeSeconds: process.uptime(), memoryBytes: process.memoryUsage(), connections: gateway.diagnostics?.() ?? null,
+            } });
             if (path === `${base}/pair` && req.method === 'POST') {
                 if (!config.pairingEnabled) return reply(res, 403, { error: 'Pairing requires explicit user participation and enablement' });
                 await gateway.pair(); return reply(res, 202, { status: gateway.status() });

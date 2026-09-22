@@ -1,4 +1,4 @@
-import makeWASocket, { DisconnectReason, type WASocket } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, type WASocket, type AuthenticationCreds } from '@whiskeysockets/baileys';
 import { PrismaClient } from '@prisma/client';
 import pino from 'pino';
 import { encryptedAuth } from './auth-state.mjs';
@@ -12,6 +12,11 @@ export const PILOT_SOCKET_POLICY = {
     shouldIgnoreJid: (jid: string) => jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter'),
 };
 
+// Baileys QR pairing persists `me`; `registered` is not set by this flow.
+export function hasPairedIdentity(creds: Pick<AuthenticationCreds, 'me'>) {
+    return typeof creds.me?.id === 'string' && creds.me.id.length > 0;
+}
+
 export class PilotWhatsApp {
     private socket: WASocket | null = null;
     private state = 'not_paired';
@@ -22,17 +27,21 @@ export class PilotWhatsApp {
     private timer?: ReturnType<typeof setTimeout>;
     private flush: () => Promise<void> = async () => {};
     private statuses = new Map<string, string>();
+    private connectionOpens = 0;
+    private disconnects = 0;
+    private reconnectAttempts = 0;
     constructor(private db: PrismaClient, private sessionId: string, private key: string, private pairingEnabled: boolean) {}
     status() { return this.state; }
     qr() { return this.qrValue; }
     delivery(id: string) { return this.statuses.get(id) ?? null; }
+    diagnostics() { return { connectionOpens: this.connectionOpens, disconnects: this.disconnects, reconnectAttempts: this.reconnectAttempts }; }
     private record(id: string, status: string) {
         this.statuses.set(id, status);
         if (this.statuses.size > 1000) this.statuses.delete(this.statuses.keys().next().value!);
     }
     async restore() {
         const auth = await encryptedAuth(this.db, this.sessionId, this.key);
-        if (auth.state.creds.registered) await this.connect();
+        if (hasPairedIdentity(auth.state.creds)) await this.connect();
     }
     async pair() {
         if (!this.pairingEnabled) throw new Error('Pairing disabled');
@@ -50,7 +59,7 @@ export class PilotWhatsApp {
         this.connecting = true;
         try {
         const auth = await encryptedAuth(this.db, this.sessionId, this.key);
-        if (!auth.state.creds.registered && !this.pairingEnabled) { this.state = 'not_paired'; return; }
+        if (!hasPairedIdentity(auth.state.creds) && !this.pairingEnabled) { this.state = 'not_paired'; return; }
         this.flush = auth.flush;
         this.state = 'connecting';
         const socket = makeWASocket({ ...PILOT_SOCKET_POLICY, auth: auth.state, logger: pino({ level: 'silent' }),
@@ -60,14 +69,15 @@ export class PilotWhatsApp {
         socket.ev.on('connection.update', update => {
             if (this.socket !== socket || this.stopped) return;
             if (update.qr) { this.qrValue = update.qr; this.state = 'awaiting_pairing'; }
-            if (update.connection === 'open') { this.qrValue = null; this.state = 'connected'; this.attempts = 0; }
+            if (update.connection === 'open') { this.qrValue = null; this.state = 'connected'; this.attempts = 0; this.connectionOpens++; }
             if (update.connection === 'close') {
+                this.disconnects++;
                 this.socket = null; this.qrValue = null;
                 const code = (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
                 if (code === DisconnectReason.loggedOut) { this.state = 'logged_out'; this.stopped = true; return; }
                 if (++this.attempts > 5) { this.state = 'stopped'; this.stopped = true; return; }
                 this.state = 'reconnecting';
-                this.timer = setTimeout(() => { this.timer = undefined; void this.connect().catch(() => this.fatal()); }, Math.min(30000, 2000 * 2 ** (this.attempts - 1)));
+                this.timer = setTimeout(() => { this.timer = undefined; this.reconnectAttempts++; void this.connect().catch(() => this.fatal()); }, Math.min(30000, 2000 * 2 ** (this.attempts - 1)));
             }
         });
         socket.ev.on('messages.update', updates => {
