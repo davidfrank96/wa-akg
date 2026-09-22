@@ -30,8 +30,9 @@ if ! id mykustomers >/dev/null 2>&1; then
 fi
 # Keep key-based root bootstrap until an independent sudo SSH session succeeds.
 printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n' > /etc/ssh/sshd_config.d/00-wa-gateway.conf
+install -d -m 755 /run/sshd
 sshd -t
-systemctl reload ssh
+systemctl reload-or-restart ssh
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp
