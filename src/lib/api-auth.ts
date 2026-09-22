@@ -248,11 +248,4 @@ export async function getAccessibleSessions(userId: string, userRole: string) {
 /**
  * Generate a new API key
  */
-export function generateApiKey(): string {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "wag_"; // Prefix for easy identification
-    for (let i = 0; i < 32; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-}
+export { generateApiKey } from "./api-key";

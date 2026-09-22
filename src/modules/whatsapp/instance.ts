@@ -67,7 +67,8 @@ export class WhatsAppInstance {
             },
             browser: ["Ubuntu", "Chrome", "20.0.04"],
             markOnlineOnConnect: botConfig?.alwaysOnline ?? true,
-            syncFullHistory: true,
+            syncFullHistory: false,
+            shouldSyncHistoryMessage: () => false,
         });
 
         // Apply Anti-Spam Wrapper to sendMessage

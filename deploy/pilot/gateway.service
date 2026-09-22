@@ -1,0 +1,37 @@
+[Unit]
+Description=My Kustomers isolated WhatsApp test gateway
+After=network-online.target mysql.service
+Wants=network-online.target mysql.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=mykustomers
+Group=mykustomers
+WorkingDirectory=/opt/mykustomers-wa-gateway
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--max-old-space-size=512
+EnvironmentFile=/opt/mykustomers-wa-gateway/.env
+ExecStart=/usr/local/bin/node /opt/mykustomers-wa-gateway/build/pilot/main.mjs
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryHigh=384M
+MemoryMax=640M
+TasksMax=128
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

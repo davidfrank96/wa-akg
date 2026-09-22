@@ -11,7 +11,11 @@
     "db:push": "prisma db push && prisma generate",
     "db:studio": "prisma studio",
     "make-admin": "node scripts/setup-admin.js",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "pilot:build": "tsc -p tsconfig.pilot.json",
+    "pilot:start": "node --env-file=.env build/pilot/main.mjs",
+    "pilot:bootstrap": "node --env-file=.env build/pilot/bootstrap.mjs",
+    "pilot:test": "node --import tsx --test tests/pilot/*.test.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -30,7 +34,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/typography": "^0.5.19",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
