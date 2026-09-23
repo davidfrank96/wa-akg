@@ -96,3 +96,16 @@ Local npm ci, upstream npm run build and repository TypeScript check passed with
 Baileys is an unofficial WhatsApp Web client and this dependency is a release candidate. Protocol changes, disconnections or account restrictions remain possible. Upstream Next/Auth and other dependencies still require review before exposing any legacy UI. No customer-readiness claim is made. The $6 host must be measured; do not automatically upgrade if insufficient.
 
 Replaceability: keep the small gateway API independent of booking logic. A future adapter can replace Baileys with Meta's official WhatsApp API while preserving provider IDs, delivery-state semantics and consent controls. Phase 2 must separately introduce consent, a durable outbox/idempotency, verified callbacks, retention and customer integration; none is implemented here.
+
+
+## My Kustomers Admin control boundary
+
+My Kustomers Admin is the control plane for one platform sender; the upstream dashboard remains private and is never started. Vendor transactional events continue through the original idempotent send API. There is no broadcast, arbitrary message, Droplet, terminal or MySQL control endpoint.
+
+`WA_AKG_CONTROL_API_KEY` is a distinct 32-byte hex server-only key, stored only in the gateway mode-600 environment and Vercel Production. The narrow `/internal/v1/control/session` GET returns normalized state, last four digits only, connection/process uptime, memory, database health and pause status. POST accepts only reconnect/pair/replace/unlink/resume plus a UUID operation ID. QR retrieval is a separate no-store endpoint, unavailable while connected or outside a two-minute pairing lease. No QR, identity or provider error is logged. The legacy pairing flag stays false.
+
+Control mutations serialize against message handoffs. Session.config holds a durable pause; existing send ledger reserves control operation IDs in a distinct namespace so uncertain requests cannot repeat destructive work. Pause persistence must succeed before mutation. An in-flight send finishes normally; replacement returns busy for an explicit retry. Auth removal is scoped to the one canonical session and follows socket shutdown/flush. Replacement or abandoned pairing remains paused across process restarts. Resume is explicit, only after connected/database-healthy verification, and does not broaden recipient/business guards. The app also pauses its SQL claim boundary, leaving pending events queued.
+
+Pairing and replacement are fixture-tested, not performed on the currently linked test account during release smoke. Deployment requires one process restart to load compiled code, followed by read-only health/control checks; it does not call reconnect/pair/replace/unlink. Roll back to the recorded prior SHA preserving environment/auth and database. Do not roll back to code that ignores a currently active control pause; first leave application sending globally disabled.
+
+Validation: pilot TypeScript and focused ESLint passed; all 15 pilot tests passed, including control authentication, sanitization, QR no-store, pause/deduplication, original encryption and send idempotency. Full upstream lint/dependency findings remain separate from the deployed pilot boundary.
