@@ -108,4 +108,4 @@ Control mutations serialize against message handoffs. Session.config holds a dur
 
 Pairing and replacement are fixture-tested, not performed on the currently linked test account during release smoke. Deployment requires one process restart to load compiled code, followed by read-only health/control checks; it does not call reconnect/pair/replace/unlink. Roll back to the recorded prior SHA preserving environment/auth and database. Do not roll back to code that ignores a currently active control pause; first leave application sending globally disabled.
 
-Validation: pilot TypeScript and focused ESLint passed; all 15 pilot tests passed, including control authentication, sanitization, QR no-store, pause/deduplication, original encryption and send idempotency. Full upstream lint/dependency findings remain separate from the deployed pilot boundary.
+Validation: pilot TypeScript and focused ESLint passed; all 17 pilot tests passed, including control authentication, sanitization, QR no-store, pause/deduplication, original encryption and send idempotency. Full upstream lint/dependency findings remain separate from the deployed pilot boundary.

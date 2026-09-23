@@ -50,7 +50,8 @@ export class PilotWhatsApp {
     async beginPairing() {
         const loggedOut = this.state === 'logged_out';
         await this.close();
-        if (loggedOut) await this.db.authState.deleteMany({ where: { sessionId: this.sessionId } }); this.stopped = false; this.attempts = 0; this.pairingUntil = Date.now() + 120000;
+        if (loggedOut) await this.db.authState.deleteMany({ where: { sessionId: this.sessionId } });
+        this.stopped = false; this.attempts = 0; this.pairingUntil = Date.now() + 120000;
         this.pairingLease = setTimeout(() => {
             this.pairingUntil = 0;
             if (this.state !== 'connected') void this.close().catch(() => this.fatal());

@@ -57,14 +57,14 @@ export class SessionControl {
         const account = this.session.identity();
         // Defensive reconstruction: never serialize the provider identity object.
         return { status: normalizedState(this.session.status()), gateway: 'healthy', database: database ? 'healthy' : 'unavailable',
-            linked: account !== null, account: account && /^\d{4}$/.test(account.last4) ? { last4: account.last4 } : null,
+            linked: this.session.status() === 'connected' || account !== null, account: account && /^\d{4}$/.test(account.last4) ? { last4: account.last4 } : null,
             connectedSince: since, uptimeSeconds: since ? Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 1000)) : 0,
             processUptimeSeconds: Math.floor(process.uptime()), reconnectAttempts: this.session.diagnostics().reconnectAttempts,
             paused: await this.store.paused(), restricted, memory: { availableBytes: availableMemory(), totalBytes: totalmem(), rssBytes: process.memoryUsage().rss } };
     }
     async act(action: ControlAction, operationId: string, databaseHealthy: () => Promise<boolean>) {
         if (action === 'resume' && (this.session.status() !== 'connected' || !await databaseHealthy())) throw new Error('not_connected');
-        if (action === 'pair' && this.session.identity()) throw new Error('already_linked');
+        if (action === 'pair' && (this.session.status() === 'connected' || this.session.identity())) throw new Error('already_linked');
         if (!await this.store.reserve(operationId)) throw new Error('already_requested');
         // Persistence precedes every session mutation. Failure/abandonment stays paused.
         await this.store.pause(true);
