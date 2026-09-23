@@ -48,7 +48,9 @@ export class PilotWhatsApp {
         await this.connect();
     }
     async beginPairing() {
-        await this.close(); this.stopped = false; this.attempts = 0; this.pairingUntil = Date.now() + 120000;
+        const loggedOut = this.state === 'logged_out';
+        await this.close();
+        if (loggedOut) await this.db.authState.deleteMany({ where: { sessionId: this.sessionId } }); this.stopped = false; this.attempts = 0; this.pairingUntil = Date.now() + 120000;
         this.pairingLease = setTimeout(() => {
             this.pairingUntil = 0;
             if (this.state !== 'connected') void this.close().catch(() => this.fatal());
@@ -108,7 +110,7 @@ export class PilotWhatsApp {
                 this.disconnects++;
                 this.socket = null; this.qrValue = null;
                 const code = (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
-                if (code === DisconnectReason.loggedOut) { this.state = 'logged_out'; this.stopped = true; return; }
+                if (code === DisconnectReason.loggedOut) { this.state = 'logged_out'; this.last4 = null; this.since = null; this.stopped = true; return; }
                 if (++this.attempts > 5) { this.state = 'stopped'; this.stopped = true; return; }
                 this.state = 'reconnecting';
                 this.timer = setTimeout(() => { this.timer = undefined; this.reconnectAttempts++; void this.connect().catch(() => this.fatal()); }, Math.min(30000, 2000 * 2 ** (this.attempts - 1)));

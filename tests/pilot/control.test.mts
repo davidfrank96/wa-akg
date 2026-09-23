@@ -47,3 +47,20 @@ test('state normalization and failed persistence never mutate session',async()=>
  const control=new SessionControl(session,{paused:async()=>true,reserve:async()=>true,pause:async()=>{throw Error('db unavailable');}});
  await assert.rejects(control.act('reconnect',randomUUID(),async()=>true));assert.equal(mutations,0);
 });
+
+test('unlink stops callbacks and flushes before clearing only canonical credentials',async()=>{
+ const {PilotWhatsApp}=await import('../../src/pilot/whatsapp.mjs');
+ const calls:string[]=[];let scope:unknown;
+ const db={authState:{deleteMany:async(value:unknown)=>{scope=value;calls.push('delete');}}} as unknown as import('@prisma/client').PrismaClient;
+ const wa=new PilotWhatsApp(db,'canonical','a'.repeat(64),false);
+ Object.assign(wa,{socket:{ev:{removeAllListeners:()=>calls.push('remove')},logout:async()=>{calls.push('logout');},end:()=>calls.push('end')},flush:async()=>{calls.push('flush');}});
+ await wa.unlink();assert.deepEqual(scope,{where:{sessionId:'canonical'}});assert.ok(calls.indexOf('flush')<calls.indexOf('delete'));assert.ok(calls.indexOf('remove')<calls.indexOf('logout'));assert.equal(wa.status(),'logged_out');assert.equal(wa.identity(),null);
+});
+
+test('failed remote unlink does not erase stored credentials',async()=>{
+ const {PilotWhatsApp}=await import('../../src/pilot/whatsapp.mjs');let deleted=false;
+ const db={authState:{deleteMany:async()=>{deleted=true;}}} as unknown as import('@prisma/client').PrismaClient;
+ const wa=new PilotWhatsApp(db,'canonical','a'.repeat(64),false);
+ Object.assign(wa,{socket:{ev:{removeAllListeners:()=>{}},logout:async()=>{throw Error('provider failed');},end:()=>{}},flush:async()=>{}});
+ await assert.rejects(wa.unlink());assert.equal(deleted,false);
+});
