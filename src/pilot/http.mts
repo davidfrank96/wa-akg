@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { SessionControl, CONTROL_ACTIONS, type ControlAction } from './control.mjs';
 import { validKey } from './security.mjs';
 import { payloadDigest, type SendStore, type SendRecord } from './idempotency.mjs';
 
@@ -11,8 +12,8 @@ export interface Gateway {
     diagnostics?(): { connectionOpens: number; disconnects: number; reconnectAttempts: number };
 }
 
-export function gatewayServer(config: { apiKey: string; sessionId: string; recipients: string[]; pairingEnabled: boolean }, gateway: Gateway, databaseHealthy: () => Promise<boolean>, sendStore?: SendStore) {
-    let requests = 0, windowStart = Date.now(), lastSend = 0, sending = false;
+export function gatewayServer(config: { apiKey: string; sessionId: string; recipients: string[]; pairingEnabled: boolean; controlKey?: string }, gateway: Gateway, databaseHealthy: () => Promise<boolean>, sendStore?: SendStore, control?: SessionControl) {
+    let requests = 0, windowStart = Date.now(), lastSend = 0, sending = false, controlling = false;
     const reply = (res: ServerResponse, status: number, body: unknown) => {
         res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         res.end(JSON.stringify(body));
@@ -37,6 +38,29 @@ export function gatewayServer(config: { apiKey: string; sessionId: string; recip
                 const whatsapp = gateway.status();
                 const healthy = database && !['error', 'logged_out', 'stopped'].includes(whatsapp);
                 return reply(res, healthy ? 200 : 503, { service: 'mykustomers-whatsapp-gateway', status: healthy ? 'ok' : 'degraded', database: database ? 'ok' : 'unavailable', whatsapp });
+            }
+            if (path.startsWith('/internal/v1/control/')) {
+                if (!config.controlKey || !control || !validKey(req.headers['x-control-key'], config.controlKey)) return reply(res, 401, { code: 'unauthorized' });
+                const base = '/internal/v1/control/session';
+                if (path === base && req.method === 'GET') return reply(res, 200, await control.status(await databaseHealthy(), true));
+                if (path === `${base}/qr` && req.method === 'GET') {
+                    const qr = await control.qr(); return reply(res, qr ? 200 : 409, qr ?? { code: 'qr_unavailable' });
+                }
+                if (path !== base || req.method !== 'POST') return reply(res, 404, { code: 'not_found' });
+                let body: Record<string, unknown>;
+                try { body = await json(req); } catch { return reply(res, 400, { code: 'invalid_request' }); }
+                if (Object.keys(body).some(k => !['action', 'operationId'].includes(k)) || !CONTROL_ACTIONS.includes(body.action as ControlAction)
+                    || typeof body.operationId !== 'string' || !/^[a-f0-9-]{36}$/.test(body.operationId)) return reply(res, 400, { code: 'invalid_request' });
+                if (controlling) return reply(res, 409, { code: 'control_busy' });
+                controlling = true;
+                try {
+                    // Block future handoffs immediately and persist the pause before logout.
+                    // An in-flight send finishes normally; the operator can retry once it ends.
+                    if (sending) { await control.store.pause(true); return reply(res, 409, { code: 'handoff_in_progress' }); }
+                    await control.act(body.action as ControlAction, body.operationId, databaseHealthy);
+                    return reply(res, 200, { status: 'requested' });
+                } catch { return reply(res, 409, { code: 'control_not_completed' }); }
+                finally { controlling = false; }
             }
             if (!validKey(req.headers['x-api-key'], config.apiKey)) return reply(res, 401, { error: 'Unauthorized' });
             if (Date.now() - windowStart > 60000) { requests = 0; windowStart = Date.now(); }
@@ -75,6 +99,7 @@ export function gatewayServer(config: { apiKey: string; sessionId: string; recip
                 const previous = await sendStore.find(body.clientMessageId);
                 if (previous) return replay(previous);
                 if (gateway.status() !== 'connected') return reply(res, 409, { code: 'session_disconnected', status: 'NOT_ACCEPTED' });
+                if (controlling || (control && await control.store.paused()) || controlling) return reply(res, 409, { code: 'session_disconnected', status: 'NOT_ACCEPTED' });
                 if (sending || Date.now() - lastSend < 10000) return reply(res, 429, { code: 'send_rate_limited', status: 'NOT_ACCEPTED' });
                 // Set the single-process gate before awaiting the durable reservation.
                 sending = true;
@@ -108,6 +133,7 @@ export function gatewayServer(config: { apiKey: string; sessionId: string; recip
                 }
                 if (!config.recipients.includes(body.recipient)) return reply(res, 403, { error: 'Recipient not explicitly authorized for testing' });
                 if (gateway.status() !== 'connected') return reply(res, 409, { error: 'WhatsApp not connected' });
+                if (controlling || (control && await control.store.paused()) || controlling) return reply(res, 409, { code: 'session_disconnected', status: 'NOT_ACCEPTED' });
                 if (sending || Date.now() - lastSend < 10000) return reply(res, 429, { error: 'Wait at least 10 seconds between controlled sends' });
                 sending = true; lastSend = Date.now();
                 try { const id = await gateway.send(body.recipient, body.text); return reply(res, 200, { providerId: id, status: 'sent' }); }

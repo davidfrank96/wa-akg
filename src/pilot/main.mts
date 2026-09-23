@@ -1,10 +1,12 @@
 import { PrismaClient } from '@prisma/client';
+import { SessionControl, MysqlControlStore } from './control.mjs';
 import { requireSecret } from './security.mjs';
 import { gatewayServer } from './http.mjs';
 import { PilotWhatsApp } from './whatsapp.mjs';
 import { MysqlSendStore } from './idempotency.mjs';
 
 const apiKey = requireSecret('WA_GATEWAY_API_KEY');
+if (process.env.WA_AKG_CONTROL_API_KEY === apiKey) throw new Error('Control and delivery credentials must differ');
 const encryptionKey = requireSecret('WA_AUTH_STATE_KEY');
 requireSecret('AUTH_SECRET');
 const databaseUrl = new URL(process.env.DATABASE_URL ?? '');
@@ -19,9 +21,9 @@ await sends.recoverInterrupted();
 if (await db.session.count() !== 1 || !await db.session.findUnique({ where: { sessionId } })) throw new Error('Expected exactly one provisioned pilot session');
 await wa.restore();
 const server = gatewayServer({ apiKey, sessionId, recipients: (process.env.WA_ALLOWED_RECIPIENTS ?? '').split(',').filter(Boolean),
-    pairingEnabled: process.env.WA_PAIRING_ENABLED === 'true' }, wa, async () => {
+    pairingEnabled: process.env.WA_PAIRING_ENABLED === 'true', controlKey: process.env.WA_AKG_CONTROL_API_KEY ? requireSecret('WA_AKG_CONTROL_API_KEY') : undefined }, wa, async () => {
     try { await db.$queryRaw`SELECT 1`; return true; } catch { return false; }
-}, sends);
+}, sends, new SessionControl(wa, new MysqlControlStore(db, sessionId)));
 server.listen(3000, '127.0.0.1', () => console.log('My Kustomers test gateway listening on loopback'));
 let closing = false;
 async function shutdown() {
